@@ -1,0 +1,34 @@
+# --- Klipper & Firmware Build Artifacts ---
+# Ignore the generated configuration settings from make menuconfig
+.config
+.config.old
+
+# Ignore all compiled object files, dependencies, and temporary build folders
+src/
+out/
+bin/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.uf2
+
+# --- Python Environment (If using Python/Klippy helpers) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# --- System & OS Garbage ---
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+
+# --- Text Editor / IDE Configs ---
+.vscode/
+.idea/
+*.swp
+*.swo
