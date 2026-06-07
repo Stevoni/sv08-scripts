@@ -1,0 +1,27 @@
+name: Shell Script Checks
+
+on:
+  pull_request:
+    paths:
+      - 'etc/scripts/**'
+      - 'scripts/**/*.sh'
+      - '.github/workflows/shell_checks.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'etc/scripts/**'
+      - 'scripts/**/*.sh'
+      - '.github/workflows/shell_checks.yaml'
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shell script checks
+        run: bash etc/scripts/pr_check.sh .
