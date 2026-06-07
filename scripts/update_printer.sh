@@ -2,6 +2,7 @@
 
 CONFIG_FILE=~/printer_data/config/printer.cfg
 CONFIG_DIR=${CONFIG_FILE%/*}
+KLIPPER_DIR=~/klipper
 EDDY_BOOTLOADER_USB_ID=2e8a:0003
 MOONRAKER_URL=http://localhost:7125
 ACTIVE_CONFIG_FILES=()
@@ -214,6 +215,59 @@ prompt_and_run_flash_command() {
                 ;;
         esac
     done
+}
+
+preflight_klipper_update() {
+    local changed_files
+    local upstream
+    local local_rev
+    local upstream_rev
+    local base_rev
+
+    if [ ! -d "$KLIPPER_DIR/.git" ]; then
+        echo "Error: Klipper Git checkout not found: $KLIPPER_DIR"
+        exit 1
+    fi
+
+    changed_files=$(git -C "$KLIPPER_DIR" status --porcelain --untracked-files=no)
+    if [ -n "$changed_files" ]; then
+        echo "Error: Klipper has local tracked changes that could be overwritten by update:"
+        printf '%s\n' "$changed_files" | sed 's/^/  /'
+        echo ""
+        echo "Inspect these changes on the printer host before rerunning:"
+        echo "  cd $KLIPPER_DIR"
+        echo "  git status --short"
+        echo "  git diff"
+        echo ""
+        echo "Commit, stash, or intentionally discard the local Klipper changes before continuing."
+        exit 1
+    fi
+
+    echo "Fetching Klipper updates..."
+    git -C "$KLIPPER_DIR" fetch origin
+
+    if ! upstream=$(git -C "$KLIPPER_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null); then
+        echo "Error: Klipper checkout has no upstream branch configured."
+        echo "Run this on the printer host to inspect it:"
+        echo "  cd $KLIPPER_DIR"
+        echo "  git branch -vv"
+        exit 1
+    fi
+
+    local_rev=$(git -C "$KLIPPER_DIR" rev-parse HEAD)
+    upstream_rev=$(git -C "$KLIPPER_DIR" rev-parse "$upstream")
+    base_rev=$(git -C "$KLIPPER_DIR" merge-base HEAD "$upstream")
+
+    if [ "$local_rev" != "$upstream_rev" ] &&
+        [ "$base_rev" != "$local_rev" ] &&
+        [ "$base_rev" != "$upstream_rev" ]; then
+        echo "Error: Klipper branch has diverged from $upstream and cannot be updated with --ff-only."
+        echo "Resolve the Klipper Git history on the printer host before rerunning:"
+        echo "  cd $KLIPPER_DIR"
+        echo "  git status"
+        echo "  git log --oneline --decorate --graph --max-count=20 --all"
+        exit 1
+    fi
 }
 
 send_gcode_script() {
@@ -449,6 +503,7 @@ if [[ "$confirm" != [yY] && "$confirm" != [yY][eE][sS] ]]; then
     exit 1
 fi
 
+preflight_klipper_update
 confirm_and_position_toolhead
 
 # ---------------------------------------------------------
@@ -458,9 +513,8 @@ echo "Stopping Klipper and Moonraker..."
 sudo systemctl stop klipper moonraker
 
 echo "Cleaning previous Klipper installation and updating..."
-cd ~/klipper || exit
-git fetch origin
-git pull
+cd "$KLIPPER_DIR" || exit
+git pull --ff-only
 make clean
 
 # ---------------------------------------------------------
