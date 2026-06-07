@@ -218,16 +218,51 @@ prompt_and_run_flash_command() {
 
 send_gcode_script() {
     local gcode_script=$1
+    local request_body
+    local response
 
     if ! command -v curl >/dev/null 2>&1; then
         echo "Error: curl is required to send G-code through Moonraker."
         exit 1
     fi
 
-    curl --fail --silent --show-error \
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "Error: python3 is required to prepare and validate Moonraker requests."
+        exit 1
+    fi
+
+    request_body=$(printf '{"script":%s}' "$(printf '%s' "$gcode_script" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')")
+
+    if ! response=$(curl --fail --silent --show-error \
         -X POST "$MOONRAKER_URL/printer/gcode/script" \
         -H "Content-Type: application/json" \
-        --data "$(printf '{"script":%s}' "$(printf '%s' "$gcode_script" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read()))')")"
+        --data "$request_body"); then
+        echo "Error: Moonraker rejected the G-code request. Aborting before update or flash."
+        exit 1
+    fi
+
+    if ! printf '%s' "$response" | python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except json.JSONDecodeError as exc:
+    print(f"Error: Moonraker returned invalid JSON: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if isinstance(payload, dict) and "error" in payload:
+    error = payload["error"]
+    if isinstance(error, dict):
+        message = error.get("message") or error.get("error") or json.dumps(error, sort_keys=True)
+    else:
+        message = str(error)
+    print(f"Error: Moonraker returned an error response: {message}", file=sys.stderr)
+    sys.exit(1)
+'; then
+        echo "Aborting before update or flash."
+        exit 1
+    fi
 }
 
 confirm_and_position_toolhead() {
