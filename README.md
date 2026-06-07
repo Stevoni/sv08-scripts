@@ -28,6 +28,8 @@ The conversion provides the base Klipper environment. This repository additional
 * Printer config at `~/printer_data/config/printer.cfg`.
 * MCU sections named `[mcu]` for the mainboard and `[mcu extra_mcu]` for the toolhead.
 * Permission to stop and start `klipper` and `moonraker` with `sudo systemctl`.
+* Moonraker reachable on the printer host at `http://localhost:7125` so the script can send the guarded homing and Z lift command before stopping services.
+* `curl` available on the printer host for Moonraker G-code requests.
 * If using Eddy, an `[mcu eddy]` section in `printer.cfg` and eddy-ng installed at `~/eddy-ng`.
 * For Eddy updates, Python's `serial` module must be available so the script can put the RP2040 into bootloader mode.
 
@@ -36,12 +38,13 @@ The conversion provides the base Klipper environment. This repository additional
 ### Updating Klipper and SV08 Hardware
 
 To prevent you from needing to look up paths manually, the script follows this remote-execution flow:
+1. **Configured Device Discovery:** Reads the configured MCU serial paths from `printer.cfg` and active included config files.
+1. **Confirmation:** Prints the mainboard, toolhead, and optional Eddy paths before any flashing workflow begins.
+1. **Toolhead Safety Positioning:** Prompts you to home and move to Z=20 mm, skip positioning, or cancel. If skipped, the script warns that Eddy calibration expects the toolhead at Z=20 mm and asks you to confirm the skip.
 1. **Stops Klipper and Moonraker:** Clears the serial communication channels so the hardware isn't locked.
 1. **Updates Klipper safely:** Fetches upstream changes and runs `git pull --ff-only` in `~/klipper`. If your Klipper checkout has diverged, the script stops instead of discarding local changes.
 1. **Interactive Configuration:** Drops you straight into Klipper's native `make menuconfig` so you can verify settings.
-1. **Configured Device Discovery:** Reads the configured MCU serial paths from `printer.cfg`.
-1. **Confirmation:** Prints the mainboard, toolhead, and optional Eddy paths before flashing.
-1. **Builds & Flashes:** Compiles the fresh binaries and flashes the confirmed targets.
+1. **Builds & Flashes:** Compiles the fresh binaries and prompts before each flash command so you can run, skip, or cancel.
   - [Optional] **Updates Eddy sensor:** Compiles the fresh binaries and auto-targets the Eddy sensor.
       **Note:** Currently only supports eddy-ng, https://github.com/vvuk/eddy-ng, and, more specifically, btt-eddy, https://github.com/vvuk/eddy-ng/wiki/BTT-Eddy.
 ---
@@ -86,6 +89,16 @@ Run the script to begin the update, configuration, confirmation, and flash flow.
 ```bash
 ./scripts/update_printer.sh
 ```
+Before Klipper and Moonraker are stopped, the script asks whether to home the printer and move the toolhead to 20 mm above the plate. If you choose to run positioning, it sends this G-code through Moonraker:
+
+```gcode
+G28
+G90
+G1 Z20 F600
+```
+
+You may skip positioning, but the script will ask for a second confirmation because Eddy calibration expects the toolhead to be positioned at Z=20 mm.
+
 * **For Mainboard:** Ensure your target matches the SV08 architecture (e.g., `STM32F103`, `8KiB bootloader`, `USB communication`). Save and exit.
 * **For Toolhead:** Repeat for your explicit toolhead chip profile.
 * **For Eddy:** If configured, verify the RP2040 Eddy firmware settings when the second menu opens.
