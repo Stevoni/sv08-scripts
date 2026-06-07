@@ -460,7 +460,7 @@ sudo systemctl stop klipper moonraker
 echo "Cleaning previous Klipper installation and updating..."
 cd ~/klipper || exit
 git fetch origin
-git pull --ff-only
+git pull
 make clean
 
 # ---------------------------------------------------------
