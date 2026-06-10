@@ -3,6 +3,7 @@
 CONFIG_FILE=~/printer_data/config/printer.cfg
 CONFIG_DIR=${CONFIG_FILE%/*}
 KLIPPER_DIR=~/klipper
+EDDY_NG_DIR=~/eddy-ng
 EDDY_BOOTLOADER_USB_ID=2e8a:0003
 MOONRAKER_URL=http://localhost:7125
 ACTIVE_CONFIG_FILES=()
@@ -219,6 +220,7 @@ prompt_and_run_flash_command() {
 
 preflight_klipper_update() {
     local changed_files
+    local dirty_confirm
     local upstream
     local local_rev
     local upstream_rev
@@ -231,6 +233,21 @@ preflight_klipper_update() {
 
     changed_files=$(git -C "$KLIPPER_DIR" status --porcelain --untracked-files=no)
     if [ -n "$changed_files" ]; then
+        if [ -n "$EDDY_SERIAL" ]; then
+            echo "Warning: Klipper has local tracked changes:"
+            printf '%s\n' "$changed_files" | sed 's/^/  /'
+            echo ""
+            echo "This can be expected when eddy-ng has patched the Klipper checkout."
+            echo "Do not continue if you do not recognize these changes."
+            read -r -p "Continue with the dirty Klipper checkout? (y/n): " dirty_confirm
+
+            if [[ "$dirty_confirm" = [yY] || "$dirty_confirm" = [yY][eE][sS] ]]; then
+                echo "Continuing with existing Klipper changes."
+            else
+                echo "User aborted because Klipper has local tracked changes."
+                exit 1
+            fi
+        else
         echo "Error: Klipper has local tracked changes that could be overwritten by update:"
         printf '%s\n' "$changed_files" | sed 's/^/  /'
         echo ""
@@ -241,6 +258,7 @@ preflight_klipper_update() {
         echo ""
         echo "Commit, stash, or intentionally discard the local Klipper changes before continuing."
         exit 1
+        fi
     fi
 
     echo "Fetching Klipper updates..."
@@ -470,6 +488,25 @@ prepare_eddy_bootloader() {
     prompt_eddy_bootloader_failure
 }
 
+update_eddy_ng_patch() {
+    if [ -z "$EDDY_SERIAL" ]; then
+        return
+    fi
+
+    if [ ! -d "$EDDY_NG_DIR" ]; then
+        echo "Error: Eddy is configured, but eddy-ng was not found: $EDDY_NG_DIR"
+        exit 1
+    fi
+
+    echo "Updating and applying eddy-ng patch..."
+    if [ -d "$EDDY_NG_DIR/.git" ]; then
+        git -C "$EDDY_NG_DIR" pull --ff-only
+    fi
+
+    cd "$EDDY_NG_DIR" || exit
+    ./install.sh
+}
+
 # ---------------------------------------------------------
 # PHASE 1: DYNAMIC DEVICE DISCOVERY & CONFIRMATION
 # ---------------------------------------------------------
@@ -515,6 +552,8 @@ sudo systemctl stop klipper moonraker
 echo "Cleaning previous Klipper installation and updating..."
 cd "$KLIPPER_DIR" || exit
 git pull --ff-only
+update_eddy_ng_patch
+cd "$KLIPPER_DIR" || exit
 make clean
 
 # ---------------------------------------------------------
@@ -583,13 +622,6 @@ if [ -n "$EDDY_SERIAL" ] && prepare_eddy_bootloader; then
     make -j4
     prompt_and_run_flash_command "Eddy" make flash "FLASH_DEVICE=$EDDY_BOOTLOADER_USB_ID"
 fi
-
-# ---------------------------------------------------------
-# PHASE 6: REAPPLY PATCH & RESTART
-# ---------------------------------------------------------
-echo "Reapplying eddy-ng patch..."
-cd ~/eddy-ng || exit
-./install.sh
 
 echo "Starting Klipper and Moonraker..."
 sudo systemctl start klipper moonraker

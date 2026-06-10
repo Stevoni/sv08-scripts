@@ -43,6 +43,7 @@ To prevent you from needing to look up paths manually, the script follows this r
 1. **Toolhead Safety Positioning:** Prompts you to home and move to Z=20 mm, skip positioning, or cancel. If skipped, the script warns that Eddy calibration expects the toolhead at Z=20 mm and asks you to confirm the skip.
 1. **Stops Klipper and Moonraker:** Clears the serial communication channels so the hardware isn't locked.
 1. **Updates Klipper safely:** Fetches upstream changes and runs `git pull --ff-only` in `~/klipper`. If your Klipper checkout has diverged, the script stops instead of discarding local changes.
+1. **Updates Eddy-ng before building:** If an Eddy MCU is configured, pulls `~/eddy-ng` with `git pull --ff-only` and runs `./install.sh` before compiling firmware so the host Klipper tree and MCU binaries use the same patched source.
 1. **Interactive Configuration:** Drops you straight into Klipper's native `make menuconfig` so you can verify settings.
 1. **Builds & Flashes:** Compiles the fresh binaries and prompts before each flash command so you can run, skip, or cancel.
   - [Optional] **Updates Eddy sensor:** Compiles the fresh binaries and auto-targets the Eddy sensor.
@@ -89,6 +90,9 @@ Run the script to begin the update, configuration, confirmation, and flash flow.
 ```bash
 ./scripts/update_printer.sh
 ```
+
+If Eddy-ng has already patched your Klipper checkout, Klipper may report a `-dirty` version before the MCU firmware is rebuilt. When an `[mcu eddy]` section is configured, the script shows the tracked Klipper changes and asks whether to continue. Only continue if those changes are expected from Eddy-ng or another intentional local Klipper patch.
+
 Before Klipper and Moonraker are stopped, the script asks whether to home the printer and move the toolhead to 20 mm above the plate. If you choose to run positioning, it sends this G-code through Moonraker:
 
 ```gcode
